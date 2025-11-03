@@ -5,18 +5,13 @@ import {Constants} from "../utils/Constants.sol";
 import "../utils/Errors.sol";
 import {DexStorage} from "../storage/DexStorage.sol";
 
-/**
- * @title Pool
- * @notice Quản lý liquidity pools với role-based access control
-*/
+/// @title Pool Management
+/// @notice Create and remove liquidity pools
 abstract contract Pool is DexStorage {
 
-    /**
-     * @notice Tạo pool mới cho cặp token
-     * @dev Chỉ POOL_MANAGER_ROLE có quyền gọi. Reverts nếu tokens không hợp lệ hoặc pool đã tồn tại.
-     * @param tokenA Địa chỉ token đầu tiên
-     * @param tokenB Địa chỉ token thứ hai
-    */
+    /// @notice Create new pool for token pair
+    /// @param tokenA First token address
+    /// @param tokenB Second token address
     function createPool(address tokenA, address tokenB) public {
         if(tokenA == address(0) || tokenB == address(0) || tokenA == tokenB){
             revert Dex__InvalidToken();
@@ -40,12 +35,9 @@ abstract contract Pool is DexStorage {
         emit Events.PoolCreated(tokenA, tokenB, poolId);
     }
 
-    /**
-     * @notice Xóa pool của một cặp token
-     * @dev Chỉ DEFAULT_ADMIN_ROLE có quyền gọi. Reverts nếu pool không tồn tại hoặc vẫn còn liquidity.
-     * @param tokenA Địa chỉ token đầu tiên
-     * @param tokenB Địa chỉ token thứ hai
-    */
+    /// @notice Remove empty pool
+    /// @param tokenA First token address
+    /// @param tokenB Second token address
     function removePool(address tokenA, address tokenB) public {
         if(tokenA == address(0) || tokenB == address(0) || tokenA == tokenB){
             revert Dex__InvalidToken();
@@ -66,13 +58,10 @@ abstract contract Pool is DexStorage {
         emit Events.PoolRemoved(tokenA, tokenB, poolId);
     }
 
-    /**
-     * @notice Tính toán ID duy nhất cho pool từ 2 token addresses
-     * @dev Token có địa chỉ nhỏ hơn đứng trước để đảm bảo getPoolId(A,B) == getPoolId(B,A).
-     * @param tokenA Địa chỉ token đầu tiên
-     * @param tokenB Địa chỉ token thứ hai
-     * @return poolId Hash 32 bytes định danh pool
-    */
+    /// @notice Generate unique pool ID
+    /// @param tokenA First token address
+    /// @param tokenB Second token address
+    /// @return poolId Unique pool identifier
     function getPoolId(address tokenA, address tokenB) public pure returns (bytes32) {
         return tokenA < tokenB
             ? keccak256(abi.encodePacked(tokenA, tokenB))

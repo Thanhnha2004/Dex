@@ -9,6 +9,17 @@ import "./Pool.sol";
 
 abstract contract Liquidity is DexStorage, Pool {
 
+    /// @notice Add liquidity to pool
+    /// @param tokenA First token address
+    /// @param tokenB Second token address
+    /// @param amountADesired Desired tokenA amount
+    /// @param amountBDesired Desired tokenB amount
+    /// @param amountAMin Min tokenA (slippage protection)
+    /// @param amountBMin Min tokenB (slippage protection)
+    /// @param minLiquidity Min LP tokens to receive
+    /// @return amountA Actual tokenA deposited
+    /// @return amountB Actual tokenB deposited
+    /// @return liquidity LP tokens minted
     function addLiquidity(
         address tokenA, 
         address tokenB,  
@@ -108,6 +119,11 @@ abstract contract Liquidity is DexStorage, Pool {
         return (amountA, amountB, liquidity);
     }
 
+    /// @notice Remove liquidity from pool
+    /// @param tokenA First token address
+    /// @param tokenB Second token address
+    /// @param minAmountA Min tokenA to receive
+    /// @param minAmountB Min tokenB to receive
     function removeLiquidity(
         address tokenA, 
         address tokenB,
@@ -153,6 +169,9 @@ abstract contract Liquidity is DexStorage, Pool {
         emit Events.LiquidityRemoved(msg.sender, amountA, amountB);
     }
 
+    /// @notice Update user rewards before liquidity changes
+    /// @param user User address
+    /// @param poolId Pool identifier
     function _updateUserRewards(address user, bytes32 poolId) internal {
         Pool storage pool = s_pools[poolId];
         uint256 userLiquidity = liquidityProvided[poolId][user];
@@ -165,6 +184,9 @@ abstract contract Liquidity is DexStorage, Pool {
         }
     }
 
+    /// @notice Calculate square root (Babylonian method)
+    /// @param x Input value
+    /// @return y Square root of x
     function sqrt(uint256 x) internal pure returns (uint256 y) {
         uint256 z = (x + 1) / 2;
         y = x;

@@ -13,11 +13,16 @@ import {Reward} from "./Reward.sol";
 import {Getter} from "./Getter.sol";
 import {Pool} from "./Pool.sol";
 
+/// @title Decentralized Exchange (DEX)
+/// @notice AMM DEX with liquidity mining rewards
+/// @dev Uses constant product formula (x*y=k) and role-based access control
 contract Dex is ReentrancyGuard, AccessControl, Pool, Liquidity, Swap, Reward, Getter {
 
     bytes32 internal constant POOL_MANAGER_ROLE = Constants.POOL_MANAGER_ROLE;
     bytes32 public constant RATE_MANAGER_ROLE = Constants.RATE_MANAGER_ROLE;
 
+    /// @notice Initialize DEX with reward token supply
+    /// @param initialSupply Initial PRT token supply
     constructor(uint256 initialSupply) ERC20("Pool Reward Token", "PRT") {
         _mint(msg.sender, initialSupply);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -67,24 +72,14 @@ contract Dex is ReentrancyGuard, AccessControl, Pool, Liquidity, Swap, Reward, G
         removeLiquidity(tokenA, tokenB, minAmountA, minAmountB);
     }
 
-    function swapAForBFromDex(
-        uint256 amountAIn, 
-        address tokenA, 
-        address tokenB, 
-        uint256 minAmountBOut, 
+    function swapFromDex(
+        uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
+        uint256 minAmountOut,
         uint256 deadline
     ) external nonReentrant{
-        swapAForB(amountAIn, tokenA, tokenB, minAmountBOut, deadline);
-    }
-
-    function swapBForAFromDex(
-        uint256 amountBIn, 
-        address tokenA, 
-        address tokenB, 
-        uint256 minAmountAOut, 
-        uint256 deadline
-    ) external nonReentrant{
-        swapBForA(amountBIn, tokenA, tokenB, minAmountAOut, deadline);
+        swap(amountIn, tokenIn, tokenOut, minAmountOut, deadline);
     }
 
     function claimRewardsFromDex() external nonReentrant{
@@ -97,12 +92,18 @@ contract Dex is ReentrancyGuard, AccessControl, Pool, Liquidity, Swap, Reward, G
         setRewardRate(_rewardRate);
     }
 
-    // function getLiquidityProvidedFromDex() external nonReentrant{
-    //     getLiquidityProvided();
-    // }
+    function getLiquidityProvidedFromDex(
+        address tokenA,
+        address tokenB
+    ) external nonReentrant{
+        getLiquidityProvided(tokenA, tokenB);
+    }
 
-    // function getTotalLiquidityFromDex() external nonReentrant{
-    //     getTotalLiquidity();
-    // }
+    function getTotalLiquidityFromDex(
+        address tokenA,
+        address tokenB
+    ) external nonReentrant{
+        getTotalLiquidity(tokenA, tokenB);
+    }
 
 }

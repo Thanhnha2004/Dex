@@ -16,4 +16,5 @@ pragma solidity ^0.8.26;
     error Dex__InsufficientBAmount();
     error Dex__InsufficientAAmount();
     error Dex__TransactionExpired();
+    error Dex__NoLiquidityInPool();
 

@@ -9,23 +9,30 @@ import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.so
 
 abstract contract Swap is DexStorage, Pool {
 
-    function swapAForB(
-        uint256 amountAIn, 
-        address tokenA, 
-        address tokenB, 
-        uint256 minAmountBOut, 
+    /// @notice Swap tokens in a pool
+    /// @param amountIn Amount of input tokens
+    /// @param tokenIn Address of input token
+    /// @param tokenOut Address of output token
+    /// @param minAmountOut Minimum output amount (slippage protection)
+    /// @param deadline Transaction deadline timestamp
+    function swap(
+        uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
+        uint256 minAmountOut,
         uint256 deadline
     ) public {
-        bytes32 poolId = getPoolId(tokenA, tokenB);
+        bytes32 poolId = getPoolId(tokenIn, tokenOut);
         Pool storage pool = s_pools[poolId];
 
+        // Validation checks
         if(block.timestamp > deadline) {
             revert Dex__TransactionExpired();
         }
-        if(tokenA == address(0) || tokenB == address(0)){
+        if(tokenIn == address(0) || tokenOut == address(0)){
             revert Dex__TokensNotSet();
         }
-        if(amountAIn == 0){
+        if(amountIn == 0){
             revert Dex__AmountMustBeAboveZero();
         }
         if(pool.reserveA == 0 || pool.reserveB == 0){
@@ -35,75 +42,45 @@ abstract contract Swap is DexStorage, Pool {
             revert Dex__PoolNotFound();
         }
 
-        IERC20(pool.tokenA).transferFrom(msg.sender, address(this), amountAIn);
-
-        // Calculate output amount using constant product formula
-        (uint256 amountBOut, uint256 fee) = getSwapToken1Estimate(amountAIn, pool);
-
-        // SLIPPAGE PROTECTION
-        if(amountBOut < minAmountBOut) {
-            revert Dex__InsufficientOutputAmount();
-        }
-        if(pool.reserveB < amountBOut) {
-            revert Dex__InsufficientLiquidity();
-        }
-
-        // Update reserves
-        pool.reserveA += amountAIn;
-        pool.reserveB -= amountBOut;
-
-        // Calculate and distribute rewards
-        uint256 reward = (fee * rewardRate) / Constants.FEE_DENOMINATOR;
-        if(reward > 0) {
-            _updateRewards(reward, pool);
-        }
-
-        IERC20(pool.tokenB).transfer(msg.sender, amountBOut);
+        // Determine swap direction (A->B or B->A)
+        bool isSwapAForB = (tokenIn == pool.tokenA);
         
-        emit Events.Swapped(msg.sender, amountAIn, amountBOut, reward);
-    }
+        // Transfer input tokens
+        IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
 
-    function swapBForA(
-        uint256 amountBIn, 
-        address tokenA, 
-        address tokenB, 
-        uint256 minAmountAOut, 
-        uint256 deadline
-    ) public {
-        bytes32 poolId = getPoolId(tokenA, tokenB);
-        Pool storage pool = s_pools[poolId];
-
-        if(block.timestamp > deadline) {
-            revert Dex__TransactionExpired();
+        // Calculate output amount
+        uint256 amountOut;
+        uint256 fee;
+        
+        if(isSwapAForB) {
+            (amountOut, fee) = getSwapToken1Estimate(amountIn, pool);
+            
+            // Slippage protection
+            if(amountOut < minAmountOut) {
+                revert Dex__InsufficientOutputAmount();
+            }
+            if(pool.reserveB < amountOut) {
+                revert Dex__InsufficientLiquidity();
+            }
+            
+            // Update reserves
+            pool.reserveA += amountIn;
+            pool.reserveB -= amountOut;
+        } else {
+            (amountOut, fee) = getSwapToken2Estimate(amountIn, pool);
+            
+            // Slippage protection
+            if(amountOut < minAmountOut) {
+                revert Dex__InsufficientOutputAmount();
+            }
+            if(pool.reserveA < amountOut) {
+                revert Dex__InsufficientLiquidity();
+            }
+            
+            // Update reserves
+            pool.reserveB += amountIn;
+            pool.reserveA -= amountOut;
         }
-        if(tokenA == address(0) || tokenB == address(0)){
-            revert Dex__TokensNotSet();
-        }
-        if(amountBIn == 0){
-            revert Dex__AmountMustBeAboveZero();
-        }
-        if(pool.reserveA == 0 || pool.reserveB == 0){
-            revert Dex__InsufficientLiquidity();
-        }
-        if(pool.tokenA == address(0)){
-            revert Dex__PoolNotFound();
-        }
-
-        IERC20(pool.tokenB).transferFrom(msg.sender, address(this), amountBIn);
-
-        (uint256 amountAOut, uint256 fee) = getSwapToken2Estimate(amountBIn, pool);
-
-        // SLIPPAGE PROTECTION
-        if(amountAOut < minAmountAOut) {
-            revert Dex__InsufficientOutputAmount();
-        }
-        if(pool.reserveA < amountAOut) {
-            revert Dex__InsufficientLiquidity();
-        }
-
-        // Update reserves
-        pool.reserveB += amountBIn;
-        pool.reserveA -= amountAOut;
 
         // Calculate and distribute rewards
         uint256 reward = (fee * rewardRate) / Constants.FEE_DENOMINATOR;
@@ -111,11 +88,17 @@ abstract contract Swap is DexStorage, Pool {
             _updateRewards(reward, pool);
         }
 
-        IERC20(pool.tokenA).transfer(msg.sender, amountAOut);
-
-        emit Events.Swapped(msg.sender, amountBIn, amountAOut, reward);
+        // Transfer output tokens
+        IERC20(tokenOut).transfer(msg.sender, amountOut);
+        
+        emit Events.Swapped(msg.sender, amountIn, amountOut, reward);
     }
 
+    /// @notice Calculate output amount for A->B swap
+    /// @param amountAIn Amount of token A to swap
+    /// @param pool Pool storage reference
+    /// @return amountBOut Amount of token B to receive
+    /// @return fee Swap fee amount
     function getSwapToken1Estimate(
         uint256 amountAIn, 
         Pool storage pool
@@ -126,12 +109,11 @@ abstract contract Swap is DexStorage, Pool {
         amountBOut = numerator / denominator;
     }
 
-    // function getSwapToken1EstimateGivenToken2(uint256 amountBOut, Pool storage pool) internal view returns(uint256 amountAIn) {
-    //     uint256 numerator = pool.reserveA * amountBOut;
-    //     uint256 denominator = pool.reserveB - amountBOut;
-    //     amountAIn = numerator / denominator;
-    // }
-
+    /// @notice Calculate output amount for B->A swap
+    /// @param amountBIn Amount of token B to swap
+    /// @param pool Pool storage reference
+    /// @return amountAOut Amount of token A to receive
+    /// @return fee Swap fee amount
     function getSwapToken2Estimate(
         uint256 amountBIn, 
         Pool storage pool
@@ -142,12 +124,9 @@ abstract contract Swap is DexStorage, Pool {
         amountAOut = numerator / denominator;
     }
 
-    // function getSwapToken2EstimateGivenToken1(uint256 amountAOut, Pool storage pool) internal view returns(uint256 amountBIn) {
-    //     uint256 numerator = pool.reserveB * amountAOut;
-    //     uint256 denominator = pool.reserveA - amountAOut;
-    //     amountBIn = numerator / denominator;
-    // }
-
+    /// @notice Update accumulated rewards for liquidity providers
+    /// @param newReward New reward amount to distribute
+    /// @param pool Pool storage reference
     function _updateRewards(
         uint256 newReward, 
         Pool storage pool
